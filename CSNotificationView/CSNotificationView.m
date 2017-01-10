@@ -17,10 +17,10 @@
 #pragma mark + quick presentation
 
 + (void)showInViewController:(UIViewController*)viewController
-         tintColor:(UIColor*)tintColor
-             image:(UIImage*)image
-           message:(NSString*)message
-          duration:(NSTimeInterval)duration
+                   tintColor:(UIColor*)tintColor
+                       image:(UIImage*)image
+                     message:(NSString*)message
+                    duration:(NSTimeInterval)duration
 {
     NSAssert(message, @"'message' must not be nil.");
     
@@ -68,17 +68,46 @@
     
 }
 
++ (CSNotificationView *)showInViewController:(UIViewController*)viewController
+                                   tintColor:(UIColor*)tintColor
+                                        font:(UIFont*)font
+                               textAlignment:(NSTextAlignment)textAlignment
+                                       image:(UIImage*)image
+                                     message:(NSString*)message
+                                    duration:(NSTimeInterval)duration tap:(CSVoidBlock)block alpha:(CGFloat)alpha{
+    NSAssert(message, @"'message' must not be nil.");
+    
+    __block CSNotificationView* note = [[CSNotificationView alloc] initWithParentViewController:viewController tintAlpha:alpha];
+    [note setTintColorNoAlpha:tintColor];
+    note.image = image;
+    note.textLabel.font = font;
+    note.textLabel.textAlignment = textAlignment;
+    note.textLabel.text = message;
+    note.frame = CGRectMake(note.frame.origin.x, note.frame.origin.y, note.frame.size.width, note.frame.size.height + note.frame.size.height/2);
+    note.tapHandler = block;
+    void (^completion)() = ^{[note setVisible:NO animated:YES completion:nil];};
+    [note setVisible:YES animated:YES completion:^{
+        double delayInSeconds = duration;
+        dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
+        dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+            completion();
+        });
+    }];
+    return note;
+}
+
+
 + (void)showInViewController:(UIViewController *)viewController
-             style:(CSNotificationViewStyle)style
-           message:(NSString *)message
+                       style:(CSNotificationViewStyle)style
+                     message:(NSString *)message
 {
     
     
     [CSNotificationView showInViewController:viewController
-                         tintColor:[CSNotificationView blurTintColorForStyle:style]
-                             image:[CSNotificationView imageForStyle:style]
-                           message:message
-                          duration:kCSNotificationViewDefaultShowDuration];
+                                   tintColor:[CSNotificationView blurTintColorForStyle:style]
+                                       image:[CSNotificationView imageForStyle:style]
+                                     message:message
+                                    duration:kCSNotificationViewDefaultShowDuration];
 }
 
 #pragma mark + creators
@@ -145,7 +174,7 @@
             [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(navigationControllerWillShowViewControllerNotification:) name:kCSNotificationViewUINavigationControllerWillShowViewControllerNotification object:nil];
             [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(navigationControllerDidShowViewControllerNotification:) name:kCSNotificationViewUINavigationControllerDidShowViewControllerNotification object:nil];
         }
-
+        
         //Key-Value Observing
         {
             [self addObserver:self forKeyPath:kCSNavigationBarBoundsKeyPath options:NSKeyValueObservingOptionNew context:kCSNavigationBarObservationContext];
@@ -160,7 +189,7 @@
                 _textLabel.textColor = [UIColor whiteColor];
                 _textLabel.backgroundColor = [UIColor clearColor];
                 _textLabel.translatesAutoresizingMaskIntoConstraints = NO;
-            
+                
                 _textLabel.numberOfLines = 2;
                 _textLabel.minimumScaleFactor = 0.6;
                 _textLabel.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -183,12 +212,105 @@
             self.tapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTapInView:)];
             [self addGestureRecognizer:self.tapRecognizer];
         }
-
+        
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
         
     }
     return self;
 }
+
+- (instancetype)initWithParentViewController:(UIViewController*)viewController tintAlpha:(CGFloat)alpha
+{
+    self = [super initWithFrame:CGRectZero];
+    if (self) {
+        
+        self.backgroundColor = [UIColor clearColor];
+        
+        //Blur view
+        {
+            
+            if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_7_1) {
+                //Use native effects
+                self.blurView = [[CSNativeBlurView alloc] initWithFrame:CGRectZero];
+                [self.blurView setAlpha:alpha];
+            } else {
+                //Use layer stealing
+                self.blurView = [[CSLayerStealingBlurView alloc] initWithFrame:CGRectZero];
+                [self.blurView setAlpha:alpha];
+            }
+            
+            self.blurView.userInteractionEnabled = NO;
+            self.blurView.translatesAutoresizingMaskIntoConstraints = NO;
+            self.blurView.clipsToBounds = NO;
+            [self insertSubview:self.blurView atIndex:0];
+            
+        }
+        
+        //Parent view
+        {
+            self.parentViewController = viewController;
+            
+            NSAssert(!([self.parentViewController isKindOfClass:[UITableViewController class]] && !self.parentViewController.navigationController), @"Due to a bug in iOS 7.0.1|2|3 UITableViewController, CSNotificationView cannot present in UITableViewController without a parent UINavigationController");
+            
+            if (self.parentViewController.navigationController) {
+                self.parentNavigationController = self.parentViewController.navigationController;
+            }
+            if ([self.parentViewController isKindOfClass:[UINavigationController class]]) {
+                self.parentNavigationController = (UINavigationController*)self.parentViewController;
+            }
+            
+        }
+        
+        //Notifications
+        {
+            [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(navigationControllerWillShowViewControllerNotification:) name:kCSNotificationViewUINavigationControllerWillShowViewControllerNotification object:nil];
+            [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(navigationControllerDidShowViewControllerNotification:) name:kCSNotificationViewUINavigationControllerDidShowViewControllerNotification object:nil];
+        }
+        
+        //Key-Value Observing
+        {
+            [self addObserver:self forKeyPath:kCSNavigationBarBoundsKeyPath options:NSKeyValueObservingOptionNew context:kCSNavigationBarObservationContext];
+        }
+        
+        //Content views
+        {
+            //textLabel
+            {
+                _textLabel = [[UILabel alloc] init];
+                
+                _textLabel.textColor = [UIColor whiteColor];
+                _textLabel.backgroundColor = [UIColor clearColor];
+                _textLabel.translatesAutoresizingMaskIntoConstraints = NO;
+                
+                _textLabel.numberOfLines = 2;
+                _textLabel.minimumScaleFactor = 0.6;
+                _textLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+                
+                UIFontDescriptor* textLabelFontDescriptor = [UIFontDescriptor preferredFontDescriptorWithTextStyle:UIFontTextStyleBody];
+                _textLabel.font = [UIFont fontWithDescriptor:textLabelFontDescriptor size:17.0f];
+                _textLabel.adjustsFontSizeToFitWidth = YES;
+                
+                [self addSubview:_textLabel];
+            }
+            //symbolView
+            {
+                [self updateSymbolView];
+            }
+        }
+        
+        //Interaction
+        {
+            //Tap gesture
+            self.tapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTapInView:)];
+            [self addGestureRecognizer:self.tapRecognizer];
+        }
+        
+        self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
+        
+    }
+    return self;
+}
+
 
 - (void)dealloc
 {
@@ -250,43 +372,43 @@
                                                                  options:0 metrics:nil views:bindings]];
     [self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(-1)-[blurView]-(-1)-|"
                                                                  options:0 metrics:nil views:bindings]];
-
+    
     
     CGFloat symbolViewWidth = self.symbolView.tag != kCSNotificationViewEmptySymbolViewTag ?
-                                kCSNotificationViewSymbolViewSidelength : 0.0f;
+    kCSNotificationViewSymbolViewSidelength : 0.0f;
     CGFloat symbolViewHeight = kCSNotificationViewSymbolViewSidelength;
     
     NSDictionary* metrics =
-        @{@"symbolViewWidth": [NSNumber numberWithFloat:symbolViewWidth],
-          @"symbolViewHeight":[NSNumber numberWithFloat:symbolViewHeight]};
+    @{@"symbolViewWidth": [NSNumber numberWithFloat:symbolViewWidth],
+      @"symbolViewHeight":[NSNumber numberWithFloat:symbolViewHeight]};
     
     [self addConstraints:[NSLayoutConstraint
-        constraintsWithVisualFormat:@"H:|-(4)-[_symbolView(symbolViewWidth)]-(5)-[_textLabel]-(10)-|"
-                            options:0
-                            metrics:metrics
-                              views:NSDictionaryOfVariableBindings(_textLabel, _symbolView)]];
+                          constraintsWithVisualFormat:@"H:|-(4)-[_symbolView(symbolViewWidth)]-(5)-[_textLabel]-(10)-|"
+                          options:0
+                          metrics:metrics
+                          views:NSDictionaryOfVariableBindings(_textLabel, _symbolView)]];
     
     [self addConstraints:[NSLayoutConstraint
-        constraintsWithVisualFormat:@"V:[_symbolView(symbolViewHeight)]"
-                            options:0
-                            metrics:metrics
-                                views:NSDictionaryOfVariableBindings(_symbolView)]];
+                          constraintsWithVisualFormat:@"V:[_symbolView(symbolViewHeight)]"
+                          options:0
+                          metrics:metrics
+                          views:NSDictionaryOfVariableBindings(_symbolView)]];
     
     [self addConstraint:[NSLayoutConstraint
-                constraintWithItem:_symbolView
+                         constraintWithItem:_symbolView
                          attribute:NSLayoutAttributeBottom
                          relatedBy:NSLayoutRelationEqual
-                            toItem:self
+                         toItem:self
                          attribute:NSLayoutAttributeBottom
                          multiplier:1.0f constant:-3]];
     
     [self addConstraint:[NSLayoutConstraint
-        constraintWithItem:_textLabel
-                 attribute:NSLayoutAttributeCenterY
-                 relatedBy:NSLayoutRelationEqual
-                    toItem:_symbolView
-                 attribute:NSLayoutAttributeCenterY
-                multiplier:1.0f constant:0]];
+                         constraintWithItem:_textLabel
+                         attribute:NSLayoutAttributeCenterY
+                         relatedBy:NSLayoutRelationEqual
+                         toItem:_symbolView
+                         attribute:NSLayoutAttributeCenterY
+                         multiplier:1.0f constant:0]];
     
     [super updateConstraints];
 }
@@ -297,6 +419,12 @@
 {
     _tintColor = tintColor;
     [self.blurView setBlurTintColor:tintColor];
+    self.contentColor = [self legibleTextColorForBlurTintColor:tintColor];
+}
+
+-(void)setTintColorNoAlpha:(UIColor*)tintColor{
+    _tintColor = tintColor;
+    [self.blurView setAlpha:1.0 forTintColor:tintColor];
     self.contentColor = [self legibleTextColorForBlurTintColor:tintColor];
 }
 
@@ -359,10 +487,10 @@
 - (void)dismissWithStyle:(CSNotificationViewStyle)style message:(NSString *)message duration:(NSTimeInterval)duration animated:(BOOL)animated
 {
     NSParameterAssert(message);
-
+    
     __block typeof(self) weakself = self;
     [UIView animateWithDuration:0.1 animations:^{
-
+        
         weakself.showingActivity = NO;
         weakself.image = [CSNotificationView imageForStyle:style];
         weakself.textLabel.text = message;
@@ -401,7 +529,7 @@
     }
     
     CGFloat topLayoutGuideLength = [self topLayoutGuideLengthCalculation];
-
+    
     CGSize transformedSize = CGSizeApplyAffineTransform(viewController.view.frame.size, viewController.view.transform);
     CGRect displayFrame = CGRectMake(0, 0, fabs(transformedSize.width),
                                      kCSNotificationViewHeight + topLayoutGuideLength);
@@ -418,7 +546,7 @@
     }
     
     CGFloat topLayoutGuideLength = [self topLayoutGuideLengthCalculation];
-
+    
     CGSize transformedSize = CGSizeApplyAffineTransform(viewController.view.frame.size, viewController.view.transform);
     CGRect offscreenFrame = CGRectMake(0, -kCSNotificationViewHeight - topLayoutGuideLength,
                                        fabs(transformedSize.width),
@@ -460,7 +588,7 @@
     _symbolView.translatesAutoresizingMaskIntoConstraints = NO;
     [self addSubview:_symbolView];
     [self setNeedsUpdateConstraints];
-
+    
 }
 
 #pragma mark -- image
@@ -517,7 +645,7 @@
 {
     if (!image) return nil;
     NSParameterAssert([tintColor isKindOfClass:[UIColor class]]);
- 
+    
     //Credits: https://gist.github.com/omz/1102091
     CGRect rect = CGRectMake(0, 0, image.size.width, image.size.height);
     UIGraphicsBeginImageContextWithOptions(rect.size, NO, image.scale);
@@ -534,10 +662,10 @@
 + (UIImage*)imageForStyle:(CSNotificationViewStyle)style
 {
     UIImage* matchedImage = nil;
-
+    
     // Either main bundle or framework bundle.
     NSBundle *containerBundle = [NSBundle bundleForClass:CSNotificationView.class];
-
+    
     // CSNotificationView.bundle is generated by CocoaPods using `resource_bundle` in Podspec.
     NSBundle *assetsBundle = [NSBundle bundleWithURL:[containerBundle URLForResource:@"CSNotificationView" withExtension:@"bundle"]];
     

@@ -36,4 +36,8 @@
     self.tintColorView.backgroundColor = [tintColor colorWithAlphaComponent:0.6];
 }
 
+-(void)setAlpha:(CGFloat)alpha forTintColor:(UIColor*)tintColor{
+    self.tintColorView.backgroundColor = [tintColor colorWithAlphaComponent:alpha];
+}
+
 @end

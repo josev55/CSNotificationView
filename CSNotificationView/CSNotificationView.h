@@ -24,14 +24,22 @@ typedef void(^CSVoidBlock)();
 #pragma mark + quick presentation
 
 + (void)showInViewController:(UIViewController*)viewController
-             style:(CSNotificationViewStyle)style
-           message:(NSString*)message;
+                       style:(CSNotificationViewStyle)style
+                     message:(NSString*)message;
 
 + (void)showInViewController:(UIViewController*)viewController
-         tintColor:(UIColor*)tintColor
-             image:(UIImage*)image
-           message:(NSString*)message
-          duration:(NSTimeInterval)duration;
+                   tintColor:(UIColor*)tintColor
+                       image:(UIImage*)image
+                     message:(NSString*)message
+                    duration:(NSTimeInterval)duration;
+
++ (CSNotificationView *)showInViewController:(UIViewController*)viewController
+                                   tintColor:(UIColor*)tintColor
+                                        font:(UIFont*)font
+                               textAlignment:(NSTextAlignment)textAlignment
+                                       image:(UIImage*)image
+                                     message:(NSString*)message
+                                    duration:(NSTimeInterval)duration tap:(CSVoidBlock)block alpha:(CGFloat)alpha;
 
 + (void)showInViewController:(UIViewController*)viewController
                    tintColor:(UIColor*)tintColor
@@ -65,6 +73,7 @@ typedef void(^CSVoidBlock)();
  * @param viewController The view controller in which the notification shall be presented.
  */
 - (instancetype)initWithParentViewController:(UIViewController*)viewController NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithParentViewController:(UIViewController*)viewController tintAlpha:(CGFloat)alpha;
 
 #pragma mark - presentation
 
